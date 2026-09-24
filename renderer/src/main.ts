@@ -4,6 +4,7 @@ import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
+import { createDracoLoader } from './draco';
 
 // When launched from the WKWebView (Quick Look extension), forward the console to
 // the Swift side's os_log. In a plain browser there is no messageHandlers, so this is a no-op.
@@ -88,6 +89,7 @@ scene.add(grid);
 // ---------------------------------------------------------------------------
 const gltfLoader = new GLTFLoader();
 gltfLoader.setMeshoptDecoder(MeshoptDecoder); // EXT_meshopt_compression (e.g. TripoAI / gltfpack output)
+gltfLoader.setDRACOLoader(createDracoLoader()); // KHR_draco_mesh_compression
 gltfLoader.register((parser) => new VRMLoaderPlugin(parser));
 const fbxLoader = new FBXLoader();
 
@@ -246,7 +248,11 @@ async function loadModelFromArrayBuffer(buffer: ArrayBuffer) {
           : 'skeleton (mesh-less) loaded & added to scene',
     );
   } catch (e) {
-    console.error('[model] load failed', e);
+    // An Error would serialize to "{}" in the os_log forwarder, so flatten it first.
+    console.error(
+      '[model] load failed',
+      e instanceof Error ? (e.stack ?? e.message) : typeof e === 'string' ? e : JSON.stringify(e),
+    );
     showOverlay('Failed to load', true);
   }
 }
