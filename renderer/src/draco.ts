@@ -7,6 +7,7 @@ import dracoWrapperJs from 'three/examples/jsm/libs/draco/gltf/draco_wasm_wrappe
 import dracoWasmDataUrl from 'three/examples/jsm/libs/draco/gltf/draco_decoder.wasm?url';
 
 function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
+  if (!/^data:.*;base64,/.test(dataUrl)) throw new Error('Draco WASM must be inlined as base64');
   const binary = atob(dataUrl.slice(dataUrl.indexOf(',') + 1));
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);

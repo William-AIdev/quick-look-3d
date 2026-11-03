@@ -14,9 +14,14 @@
     "three": "0.171.0"
   },
   "devDependencies": {
+    "@gltf-transform/core": "4.2.1",
+    "@gltf-transform/extensions": "4.2.1",
+    "@gltf-transform/functions": "4.2.1",
     "@types/three": "0.171.0",
+    "draco3dgltf": "1.5.7",
+    "meshoptimizer": "0.23.0",
     "typescript": "5.9.3",
-    "vite": "6.4.3",
+    "vite": "6.4.5",
     "vite-plugin-singlefile": "2.3.3"
   }
 }

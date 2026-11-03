@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-03",
+  "environment": {
+    "macOS": "27.2 (26B123)",
+    "architecture": "arm64",
+    "xcode": "27.2 (27B52)",
+    "node": "24.18.0"
+  },
+  "diagnostics": {
+    "frameCount": 141,
+    "generation": 122,
+    "geometries": 2,
+    "requestID": "cycle-99",
+    "textures": 0
+  },
+  "samplesMS": {
+    "draco": [
+      22.005081176757812,
+      21.70395851135254,
+      19.927978515625,
+      10.757923126220703,
+      10.7649564743042
+    ],
+    "meshopt": [
+      11.216998100280762,
+      10.745048522949219,
+      10.828018188476562,
+      10.392069816589355,
+      11.233091354370117
+    ],
+    "plain": [
+      25.277018547058105,
+      10.709047317504883,
+      10.753035545349121,
+      11.326074600219727,
+      10.522007942199707
+    ]
+  },
+  "nativeControllerPassed": true,
+  "offlineWKPassed": true,
+  "localFBXAndVRMPassed": true,
+  "terminationTest": "delegate simulation",
+  "limitations": [
+    "No Finder-host installation test",
+    "No actual WebContent kill",
+    "No RSS/GPU memory measurement",
+    "No real VRMA fixture",
+    "Remote CI result separate"
+  ]
+}

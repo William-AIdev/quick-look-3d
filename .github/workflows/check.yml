@@ -14,3 +14,13 @@ jobs:
           cache-dependency-path: renderer/package-lock.json
       - run: brew install xcodegen
       - run: bash scripts/build.sh
+      - run: node renderer/generate-fixtures.mjs
+      - run: bash scripts/test-native.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-regression-evidence
+          path: |
+            build/*regression.log
+            build/wk-regression.json
+            build/wk-regression.png

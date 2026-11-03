@@ -1,0 +1,18 @@
+{
+  "plain": {
+    "bytes": 556,
+    "sha256": "039f4d484331d64e3a9f73b0b0d42d33626e9b572d63e55bc4cbac874ff5aac9"
+  },
+  "draco": {
+    "bytes": 796,
+    "sha256": "6463a4994e06fae58a9fdcb6c4719c4f2f93aaf37b0f108cb040b1f5a836bc9f"
+  },
+  "meshopt": {
+    "bytes": 984,
+    "sha256": "fe8b33bee522f1201fe7b9a403c54db259e076fbd6d0f0d7f9ae1654f99b66eb"
+  },
+  "animated": {
+    "bytes": 948,
+    "sha256": "2bc79173dccf6800ab629456b44ca55274c9842cc3daae578564d21998602890"
+  }
+}

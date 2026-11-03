@@ -15,6 +15,7 @@ private final class WeakHandler: NSObject, WKScriptMessageHandler {
 
 final class PreviewViewController: NSViewController, QLPreviewingController, WKNavigationDelegate, WKScriptMessageHandler {
     private var webView: WKWebView!
+    private var recoveryAttempts = 0
     private var pageReady = false
     private var pageLoading = false
     private var requestID: String?
@@ -55,6 +56,7 @@ final class PreviewViewController: NSViewController, QLPreviewingController, WKN
 
     func preparePreviewOfFile(at url: URL, completionHandler handler: @escaping (Error?) -> Void) {
         _ = view
+        recoveryAttempts = 0
         finish(NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError))
         let id = UUID().uuidString
         requestID = id
@@ -139,12 +141,18 @@ final class PreviewViewController: NSViewController, QLPreviewingController, WKN
     }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         pageReady = false; pageLoading = false
+        guard recoveryAttempts < 1 else {
+            modelURL = nil
+            finish(failure("Web content process repeatedly terminated"))
+            return
+        }
         let url = modelURL
         let callback = completion
         completion = nil
         timeout?.cancel()
         if let url = url {
             preparePreviewOfFile(at: url, completionHandler: callback ?? { _ in })
+            recoveryAttempts = 1
         }
     }
 

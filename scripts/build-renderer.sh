@@ -10,6 +10,7 @@ command -v node >/dev/null || { echo "error: Node required" >&2; exit 1; }
 cd "$ROOT/renderer"
 npm ci
 npm run build
+node "$ROOT/scripts/check-renderer.mjs"
 mkdir -p "$DEST"
 cp dist/index.html "$DEST/index.html"
 cp "$ROOT/THIRD_PARTY_LICENSES.md" "$DEST/THIRD_PARTY_LICENSES.md"
