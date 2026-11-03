@@ -137,16 +137,5 @@ targets:
     preBuildScripts:
       - name: Build renderer (Vite)
         script: |
-          set -e
-          cd "$SRCROOT/renderer"
-          if [ -z "$(which node)" ]; then
-            echo "warning: node not found; skipping the renderer build"
-            exit 0
-          fi
-          [ -d node_modules ] || npm install
-          npm run build
-          DEST="$SRCROOT/QuickLook3D/Extension/Resources/renderer"
-          mkdir -p "$DEST"
-          rm -rf "$DEST"/*
-          cp -R dist/* "$DEST/"
+          bash "$SRCROOT/scripts/build-renderer.sh"
         basedOnDependencyAnalysis: false

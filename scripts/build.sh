@@ -19,14 +19,7 @@ if [ ! -d "$(xcode-select -p 2>/dev/null)/Platforms" ]; then
   fi
 fi
 
-echo "==> 1/5 Build renderer"
-( cd renderer && [ -d node_modules ] || npm install; npm run build )
-
-echo "==> 2/5 Copy renderer into the extension's Resources"
-DEST="QuickLook3D/Extension/Resources/renderer"
-mkdir -p "$DEST"
-rm -rf "${DEST:?}"/*
-cp -R renderer/dist/* "$DEST/"
+bash "$ROOT/scripts/build-renderer.sh"
 
 echo "==> 3/5 Generate the Xcode project (xcodegen)"
 if ! command -v xcodegen >/dev/null 2>&1; then
@@ -57,6 +50,7 @@ xcodebuild \
   -configuration Release \
   -derivedDataPath build \
   "${SIGN_ARGS[@]}" \
+  QL_RENDERER_PREBUILT=YES \
   build
 
 APP="build/Build/Products/Release/QuickLook3D.app"
