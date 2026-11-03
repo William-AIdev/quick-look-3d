@@ -24,6 +24,7 @@ targets:
     platform: macOS
     sources:
       - QuickLook3D/App
+      - QuickLook3D/Shared
     info:
       path: QuickLook3D/App/Info.plist
       # NOTE: XcodeGen generates Info.plist from the properties below (don't hand-edit it)
@@ -73,6 +74,7 @@ targets:
     type: app-extension
     platform: macOS
     sources:
+      - QuickLook3D/Shared
       - path: QuickLook3D/Extension
         excludes:
           - Resources

@@ -14,5 +14,17 @@
   "animated": {
     "bytes": 948,
     "sha256": "2bc79173dccf6800ab629456b44ca55274c9842cc3daae578564d21998602890"
+  },
+  "textured": {
+    "bytes": 3168984,
+    "sha256": "cbef92191624be6bc34d594bf275bf34d1f32439f4a9010b8b9798c04753e500"
+  },
+  "textured-draco": {
+    "bytes": 3169236,
+    "sha256": "4537ceac6929eaa0ba0a705e8d940ec7ec17b35906ee9bc3b56c15538be56fa6"
+  },
+  "textured-meshopt": {
+    "bytes": 3169424,
+    "sha256": "0d784feb5e6a479f5774ae3bf5bafcbe4c9f9df2236f6f56949c29c8035c16d1"
   }
 }

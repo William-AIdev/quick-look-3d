@@ -35,6 +35,20 @@ Select a supported file in Finder and press **Space** (or right-click → Quick 
 - Drag to rotate, scroll to zoom
 - Files with no mesh/skin (a skin-less `.fbx`, or `.vrma`) are shown as a skeleton
 
+## Folder preload and persistent preview settings (this fork)
+
+The app includes a folder drop workspace, automatically saved quality/FPS preferences,
+sequential preparation, cancellation, and a bounded disk cache shared with previews.
+More than 100 supported files require confirmation before preparation. Economy mode
+reduces supported embedded textures to 1024 pixels and defaults to 30 FPS. Source
+files remain untouched; close the app after preparation to release its memory.
+
+See [implementation, measured memory, and validation](docs/PRELOAD-SETTINGS-MEMORY.md).
+These features are in this fork's source/local build; the upstream release linked
+above does not include them. Local builds use ad-hoc signing and have not been notarized.
+
+![Folder preload workspace](docs/workspace.png)
+
 ## Troubleshooting
 
 - Make sure install steps 3–4 (**launch once** and **enable the extension**) are done

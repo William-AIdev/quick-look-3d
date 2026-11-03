@@ -97,7 +97,26 @@ check(frames() == hiddenBefore, "hidden animation submits no frames")
 send(["type":"visibility", "visible":true])
 spin(0.4)
 check(frames() > hiddenBefore, "animation resumes when visible")
-for (key, label) in [("QL_TEST_FBX", "real-fbx"), ("QL_TEST_VRM", "real-vrm")] {
+send(["type":"settings", "fps":15, "animate":true, "pixelRatio":1])
+spin(0.2)
+let cappedBefore = frames()
+spin(1)
+let cappedFrames = frames() - cappedBefore
+check(cappedFrames > 3 && cappedFrames <= 18, "15 FPS animation cap")
+send(["type":"settings", "fps":30, "animate":false, "pixelRatio":1])
+spin(0.2)
+let pausedBefore = frames()
+spin(0.4)
+check(frames() == pausedBefore, "animation preference disables continuous frames")
+send(["type":"settings", "fps":30, "animate":true, "pixelRatio":1])
+for name in ["textured", "textured-draco", "textured-meshopt"] {
+    let file = root.appendingPathComponent("build/\(name)-optimized.glb")
+    let bytes = try! Data(contentsOf: file)
+    send(["type":"loadVRM", "requestID":name, "base64":bytes.base64EncodedString()])
+    spin(20, until: { event("firstFrame",name) || event("error",name) })
+    check(event("firstFrame",name), "optimized offline \(name) first frame")
+}
+for (key, label) in [("QL_TEST_FBX", "real-fbx"), ("QL_TEST_VRM", "real-vrm"), ("QL_TEST_VRMA", "real-vrma")] {
     if let path = ProcessInfo.processInfo.environment[key] {
         let bytes = try! Data(contentsOf: URL(fileURLWithPath:path))
         send(["type":"loadVRM", "requestID":label, "base64":bytes.base64EncodedString()])

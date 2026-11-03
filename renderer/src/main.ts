@@ -46,7 +46,7 @@ const overlay = document.getElementById('overlay')!;
 const overlayText = document.getElementById('overlay-text')!;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 app.appendChild(renderer.domElement);
@@ -260,6 +260,7 @@ async function loadModelFromArrayBuffer(buffer: ArrayBuffer, requestID = crypto.
     applyModel(root, vrm, clips);
     applied = true;
     renderer.render(scene, camera);
+    frameCount++;
     report('firstFrame', requestID);
   } catch (e) {
     console.error('[model] load failed', e);
@@ -286,6 +287,27 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 // ---------------------------------------------------------------------------
 window.addEventListener('message', (event) => {
   const message = event.data;
+  if (message?.type === 'settings') {
+    animationEnabled = message.animate !== false;
+    const ratio = Number(message.pixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, Number.isFinite(ratio) ? Math.max(0.5, Math.min(2, ratio)) : 1));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    const fps = Number(message.fps);
+    scheduler.setFPS(Number.isFinite(fps) ? fps : 30);
+    scheduler.invalidate();
+    return;
+  }
+  if (message?.type === 'loadModel' && typeof message.requestID === 'string' && typeof message.url === 'string' && message.url.startsWith('qlmodel://preview/')) {
+    const ticket = ++generation;
+    const id = message.requestID;
+    fetch(message.url).then(response => {
+      if (!response.ok) throw new Error('Model transport failed');
+      return response.arrayBuffer();
+    }).then(buffer => {
+      if (ticket === generation && !destroyed) void loadModelFromArrayBuffer(buffer, id);
+    }).catch(error => { if (ticket === generation && !destroyed) report('error', id, String(error)); });
+    return;
+  }
   if (message?.type === 'visibility') { nativeVisible = message.visible === true; updateVisibility(); return; }
   if (message?.type === 'cancel') { ++generation; return; }
   if (message?.type !== 'loadVRM' || typeof message.base64 !== 'string' || typeof message.requestID !== 'string') return;
@@ -324,21 +346,22 @@ console.log('renderer booted, WebGL context =', !!renderer.getContext());
 // Render loop
 // ---------------------------------------------------------------------------
 let nativeVisible = true;
+let animationEnabled = true;
 let frameCount = 0;
 const scheduler = new RenderScheduler((delta) => {
   const moved = controls.update();
-  if (currentVrm) currentVrm.update(delta);
-  if (currentMixer) currentMixer.update(delta);
+  if (animationEnabled && currentVrm) currentVrm.update(delta);
+  if (animationEnabled && currentMixer) currentMixer.update(delta);
   renderer.render(scene, camera);
   frameCount++;
-  return moved || !!currentVrm || !!currentMixer;
+  return moved || (animationEnabled && (!!currentVrm || !!currentMixer));
 });
 controls.addEventListener('change', scheduler.invalidate);
 function updateVisibility() { scheduler.setVisible(nativeVisible && !document.hidden); }
 document.addEventListener('visibilitychange', updateVisibility);
 scheduler.invalidate();
 (window as any).previewDiagnostics = () => ({
-  requestID: activeRequest, frameCount, generation,
+  requestID: activeRequest, frameCount, generation, animationEnabled, pixelRatio: renderer.getPixelRatio(),
   geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures,
 });
 

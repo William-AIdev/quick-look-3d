@@ -16,6 +16,8 @@ jobs:
       - run: bash scripts/build.sh
       - run: node renderer/generate-fixtures.mjs
       - run: bash scripts/test-native.sh
+      - run: bash scripts/test-shared.sh > build/shared-regression.log 2>&1
+      - run: python3 scripts/process-recovery.py "$PWD"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -24,3 +26,6 @@ jobs:
             build/*regression.log
             build/wk-regression.json
             build/wk-regression.png
+            build/store-regression.log
+            build/shared-regression.log
+            build/process-regression.log

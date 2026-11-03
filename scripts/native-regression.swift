@@ -21,7 +21,11 @@ let window = NSWindow(contentRect: NSRect(x:100,y:100,width:640,height:480), sty
 window.isReleasedWhenClosed = false
 var controller: PreviewViewController? = PreviewViewController()
 releasedController = controller
+controller!.previewStore = try! PreviewStore(root: root.appendingPathComponent("build/native-test-store"))
+controller!.view.frame = NSRect(x: 0, y: 0, width: 640, height: 480)
+controller!.view.autoresizingMask = [.width, .height]
 window.contentViewController = controller
+window.setContentSize(NSSize(width: 640, height: 480))
 window.makeKeyAndOrderFront(nil)
 app.activate(ignoringOtherApps:true)
 let web = controller!.view as! WKWebView
@@ -31,6 +35,7 @@ var calls = [String:Int]()
 var errors = [String:Bool]()
 func prepare(_ url: URL, _ id: String) {
     controller!.preparePreviewOfFile(at:url) { error in
+        if let error = error { print("Native callback error: \(error)") }
         calls[id,default:0] += 1
         errors[id] = error != nil
     }
@@ -38,6 +43,23 @@ func prepare(_ url: URL, _ id: String) {
 prepare(plain,"initial")
 spin(20,until:{calls["initial"] != nil})
 check(calls["initial"] == 1 && errors["initial"] == false,"native completes after initial model")
+if ProcessInfo.processInfo.environment["QL_TEST_PROCESS_KILL"] == "1" {
+    var marked = false
+    web.evaluateJavaScript("window.__killMarker = true") { _, _ in marked = true }
+    spin(5, until: { marked })
+    print("READY_FOR_KILL"); fflush(stdout)
+    var recovered = false
+    let deadline = Date().addingTimeInterval(20)
+    while !recovered && Date() < deadline {
+        web.evaluateJavaScript("JSON.stringify({marker: window.__killMarker === undefined, available: typeof window.previewDiagnostics, frames: window.previewDiagnostics?.().frameCount, geometries: window.previewDiagnostics?.().geometries})") { value, error in
+            if let text = value as? String, let data = text.data(using: .utf8), let report = try? JSONSerialization.jsonObject(with:data) as? [String:Any] {
+                recovered = recovered || ((report["marker"] as? Bool) == true && (report["frames"] as? Int ?? 0) > 0 && (report["geometries"] as? Int ?? 0) > 1)
+            }
+        }
+        spin(0.15)
+    }
+    check(recovered, "real WebContent SIGKILL reloads and redraws model")
+}
 prepare(compressed,"cancelled")
 prepare(plain,"latest")
 spin(20,until:{calls["latest"] != nil})
@@ -60,6 +82,11 @@ check(calls["bounded"] == 1 && errors["bounded"] == true,"repeated termination f
 prepare(plain,"next")
 spin(20,until:{calls["next"] != nil})
 check(calls["next"] == 1 && errors["next"] == false,"new request recovers after termination limit")
+if let path = ProcessInfo.processInfo.environment["QL_TEST_VRMA"] {
+    prepare(URL(fileURLWithPath:path), "real-vrma")
+    spin(20, until: { calls["real-vrma"] != nil })
+    check(calls["real-vrma"] == 1 && errors["real-vrma"] == false, "official VRMA via native binary transport")
+}
 window.contentViewController = nil
 window.contentView = NSView()
 window.close()

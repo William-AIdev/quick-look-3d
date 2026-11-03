@@ -1,0 +1,304 @@
+{
+  "platform": "macOS-27.2-arm64-arm-64bit-Mach-O",
+  "viewport": [
+    640,
+    480
+  ],
+  "measurements": {
+    "memory-results": [
+      {
+        "cacheMode": "cold",
+        "diagnostics": {
+          "animationEnabled": false,
+          "frameCount": 18,
+          "generation": 17,
+          "geometries": 2,
+          "pixelRatio": 2,
+          "requestID": "A9DFD722-1F5F-4457-89ED-F78C8C8C7380",
+          "textures": 1
+        },
+        "entriesBefore": 0,
+        "loadMilliseconds": [
+          179.63802814483643,
+          127.34103202819824,
+          113.7779951095581,
+          116.2799596786499,
+          115.16904830932617,
+          123.3760118484497
+        ],
+        "quality": "original",
+        "source": "textured.glb",
+        "peakRSSMiB": {
+          "native": 86.58,
+          "WebContent": 219.55,
+          "GPU": 352.31,
+          "Networking": 23.58
+        },
+        "attribution": "Native PID exact; WebKit candidates are PIDs absent before launch and observed during this run; RSS is not physical footprint or exclusive GPU memory.",
+        "repeatMedianMilliseconds": 116.2799596786499
+      },
+      {
+        "cacheMode": "warm",
+        "diagnostics": {
+          "animationEnabled": false,
+          "frameCount": 18,
+          "generation": 17,
+          "geometries": 2,
+          "pixelRatio": 2,
+          "requestID": "8F685BCF-B8BA-4E69-A23A-2579A568EFC3",
+          "textures": 1
+        },
+        "entriesBefore": 1,
+        "loadMilliseconds": [
+          169.40903663635254,
+          130.04601001739502,
+          114.53807353973389,
+          113.02101612091064,
+          115.19098281860352,
+          115.80801010131836
+        ],
+        "quality": "original",
+        "source": "textured.glb",
+        "peakRSSMiB": {
+          "native": 86.17,
+          "WebContent": 207.67,
+          "GPU": 414.19,
+          "Networking": 20.34
+        },
+        "attribution": "Native PID exact; WebKit candidates are PIDs absent before launch and observed during this run; RSS is not physical footprint or exclusive GPU memory.",
+        "repeatMedianMilliseconds": 115.19098281860352
+      },
+      {
+        "cacheMode": "cold",
+        "diagnostics": {
+          "animationEnabled": false,
+          "frameCount": 18,
+          "generation": 17,
+          "geometries": 2,
+          "pixelRatio": 1,
+          "requestID": "D8C17C63-2ACD-41E0-8915-BD18374CD037",
+          "textures": 1
+        },
+        "entriesBefore": 0,
+        "loadMilliseconds": [
+          86.28690242767334,
+          33.74898433685303,
+          33.038973808288574,
+          33.30099582672119,
+          21.787047386169434,
+          22.279977798461914
+        ],
+        "quality": "economy",
+        "source": "textured.glb",
+        "peakRSSMiB": {
+          "native": 101.28,
+          "WebContent": 70.42,
+          "GPU": 84.59,
+          "Networking": 11.3
+        },
+        "attribution": "Native PID exact; WebKit candidates are PIDs absent before launch and observed during this run; RSS is not physical footprint or exclusive GPU memory.",
+        "repeatMedianMilliseconds": 33.038973808288574
+      },
+      {
+        "cacheMode": "warm",
+        "diagnostics": {
+          "animationEnabled": false,
+          "frameCount": 17,
+          "generation": 17,
+          "geometries": 2,
+          "pixelRatio": 1,
+          "requestID": "AB0A3655-394C-4655-835A-ECF1CF67926B",
+          "textures": 1
+        },
+        "entriesBefore": 1,
+        "loadMilliseconds": [
+          78.40800285339355,
+          32.891035079956055,
+          22.343039512634277,
+          21.571040153503418,
+          33.13910961151123,
+          33.97095203399658
+        ],
+        "quality": "economy",
+        "source": "textured.glb",
+        "peakRSSMiB": {
+          "native": 83.09,
+          "WebContent": 69.64,
+          "GPU": 84.22,
+          "Networking": 11.39
+        },
+        "attribution": "Native PID exact; WebKit candidates are PIDs absent before launch and observed during this run; RSS is not physical footprint or exclusive GPU memory.",
+        "repeatMedianMilliseconds": 32.891035079956055
+      }
+    ],
+    "memory-real-vrm": [
+      {
+        "cacheMode": "cold",
+        "diagnostics": {
+          "animationEnabled": false,
+          "frameCount": 18,
+          "generation": 17,
+          "geometries": 16,
+          "pixelRatio": 2,
+          "requestID": "3C237567-70D1-454B-AE57-D9068497B486",
+          "textures": 34
+        },
+        "entriesBefore": 0,
+        "loadMilliseconds": [
+          438.0190372467041,
+          384.3640089035034,
+          372.7840185165405,
+          376.3960599899292,
+          372.88105487823486,
+          370.1000213623047
+        ],
+        "quality": "original",
+        "source": "AvatarSample_A.vrm",
+        "peakRSSMiB": {
+          "native": 100.72,
+          "WebContent": 305.88,
+          "GPU": 494.73,
+          "Networking": 64.08
+        },
+        "attribution": "Native PID exact; WebKit candidates are PIDs absent before launch and observed during this run; RSS is not physical footprint or exclusive GPU memory.",
+        "repeatMedianMilliseconds": 372.88105487823486
+      },
+      {
+        "cacheMode": "warm",
+        "diagnostics": {
+          "animationEnabled": false,
+          "frameCount": 19,
+          "generation": 17,
+          "geometries": 16,
+          "pixelRatio": 2,
+          "requestID": "AA1C7C72-1650-4CFA-87D6-83236753F5A6",
+          "textures": 34
+        },
+        "entriesBefore": 1,
+        "loadMilliseconds": [
+          446.5450048446655,
+          377.67696380615234,
+          379.4139623641968,
+          375.61094760894775,
+          372.58589267730713,
+          375.6619691848755
+        ],
+        "quality": "original",
+        "source": "AvatarSample_A.vrm",
+        "peakRSSMiB": {
+          "native": 100.8,
+          "WebContent": 262.44,
+          "GPU": 494.98,
+          "Networking": 61.95
+        },
+        "attribution": "Native PID exact; WebKit candidates are PIDs absent before launch and observed during this run; RSS is not physical footprint or exclusive GPU memory.",
+        "repeatMedianMilliseconds": 375.6619691848755
+      },
+      {
+        "cacheMode": "cold",
+        "diagnostics": {
+          "animationEnabled": false,
+          "frameCount": 19,
+          "generation": 17,
+          "geometries": 16,
+          "pixelRatio": 1,
+          "requestID": "26FBF1C0-1876-46E8-B798-2591C6F7FC24",
+          "textures": 34
+        },
+        "entriesBefore": 0,
+        "loadMilliseconds": [
+          498.960018157959,
+          248.9490509033203,
+          247.2360134124756,
+          243.6610460281372,
+          256.2519311904907,
+          239.17996883392334
+        ],
+        "quality": "economy",
+        "source": "AvatarSample_A.vrm",
+        "peakRSSMiB": {
+          "native": 153.23,
+          "WebContent": 281.5,
+          "GPU": 419.84,
+          "Networking": 46.78
+        },
+        "attribution": "Native PID exact; WebKit candidates are PIDs absent before launch and observed during this run; RSS is not physical footprint or exclusive GPU memory.",
+        "repeatMedianMilliseconds": 247.2360134124756
+      },
+      {
+        "cacheMode": "warm",
+        "diagnostics": {
+          "animationEnabled": false,
+          "frameCount": 18,
+          "generation": 17,
+          "geometries": 16,
+          "pixelRatio": 1,
+          "requestID": "DF5DE32E-BABE-45B4-96B2-E98D098B3945",
+          "textures": 34
+        },
+        "entriesBefore": 1,
+        "loadMilliseconds": [
+          315.2350187301636,
+          269.19496059417725,
+          260.6499195098877,
+          246.98901176452637,
+          243.9950704574585,
+          244.1999912261963
+        ],
+        "quality": "economy",
+        "source": "AvatarSample_A.vrm",
+        "peakRSSMiB": {
+          "native": 95.62,
+          "WebContent": 249.23,
+          "GPU": 315.05,
+          "Networking": 42.81
+        },
+        "attribution": "Native PID exact; WebKit candidates are PIDs absent before launch and observed during this run; RSS is not physical footprint or exclusive GPU memory.",
+        "repeatMedianMilliseconds": 246.98901176452637
+      }
+    ],
+    "workspace": {
+      "pid": 29197,
+      "peakRSSMiB": 113.69,
+      "lastRSSMiB": 111.3,
+      "scenario": "Built sandbox app, idle workspace, no import, ~2.25 seconds"
+    }
+  },
+  "validation": {
+    "store": {
+      "passCount": 27,
+      "failed": false
+    },
+    "native": {
+      "passCount": 11,
+      "failed": false
+    },
+    "wk": {
+      "passCount": 415,
+      "failed": false
+    },
+    "shared": {
+      "passCount": 2,
+      "failed": false
+    },
+    "process": {
+      "passCount": 11,
+      "failed": false
+    }
+  },
+  "unverified": [
+    "installed Finder host and physical folder drag gesture",
+    "notarization and App Store acceptance",
+    "original warning attribution",
+    "physical footprint, exclusive GPU allocation, CPU/power, long-duration VRM leaks"
+  ],
+  "realAssets": {
+    "FBX": "Idle.fbx, read-only local test passed",
+    "VRM": "AvatarSample_A.vrm, read-only local test passed",
+    "VRMA": {
+      "source": "https://raw.githubusercontent.com/pixiv/three-vrm/3caf7a21ee68f0d5dfa363ab3d577450bbf60136/packages/three-vrm-animation/examples/models/test.vrma",
+      "sha256": "38d0fd12d61e896f1a970b5e358ebb41a96c8d5ee8e284496ea18f0ba1f04e7b",
+      "nativeBinaryTransportPassed": true
+    }
+  }
+}

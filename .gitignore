@@ -1,6 +1,8 @@
 # --- renderer (Vite / Node) ---
 renderer/node_modules/
 renderer/dist/
+# Large deterministic texture fixtures are generated for tests.
+renderer/tests/fixtures/textured*.glb
 
 # generated artifact bundled into the extension (copied from renderer/dist)
 QuickLook3D/Extension/Resources/renderer/
