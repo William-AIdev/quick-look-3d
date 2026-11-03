@@ -74,6 +74,7 @@ for name in ["plain", "draco", "meshopt"] {
         load(name,id)
         spin(20, until: { event("firstFrame",id) || event("error",id) })
         check(event("firstFrame",id), "offline \(id) first frame")
+        check(evaluate("getComputedStyle(document.getElementById('overlay')).display === 'none'") as? Bool == true, "first frame has no loading overlay")
         samples[name, default: []].append(Date().timeIntervalSince(start)*1000)
     }
 }
@@ -82,6 +83,10 @@ let before = (evaluate("previewDiagnostics()") as! [String: Any])["frameCount"] 
 spin(0.5)
 let after = (evaluate("previewDiagnostics()") as! [String: Any])["frameCount"] as! Int
 check(before > 0 && before == after, "static idle submits no frames after scheduler ran")
+let staticStats = evaluate("previewDiagnostics()") as! [String: Any]
+check(staticStats["idle"] as? Bool == true && staticStats["fps"] is NSNull, "static FPS reports idle rather than a fake zero")
+let info = staticStats["modelInfo"] as! [String: Any]
+check(info["vertices"] as? Int == 3 && info["triangles"] as? Int == 1 && info["materials"] as? Int == 1, "actual geometry and material metadata")
 func frames() -> Int { (evaluate("previewDiagnostics()") as! [String: Any])["frameCount"] as! Int }
 load("animated", "animated")
 spin(10, until: { event("firstFrame","animated") })
@@ -103,11 +108,14 @@ let cappedBefore = frames()
 spin(1)
 let cappedFrames = frames() - cappedBefore
 check(cappedFrames > 3 && cappedFrames <= 18, "15 FPS animation cap")
+let measured = (evaluate("previewDiagnostics()") as! [String: Any])["fps"] as? Double
+check(measured != nil && measured! > 3 && measured! <= 18, "live FPS measures actual capped draws")
 send(["type":"settings", "fps":30, "animate":false, "pixelRatio":1])
 spin(0.2)
 let pausedBefore = frames()
 spin(0.4)
 check(frames() == pausedBefore, "animation preference disables continuous frames")
+check((evaluate("previewDiagnostics()") as! [String: Any])["idle"] as? Bool == true, "paused animation reports idle")
 send(["type":"settings", "fps":30, "animate":true, "pixelRatio":1])
 for name in ["textured", "textured-draco", "textured-meshopt"] {
     let file = root.appendingPathComponent("build/\(name)-optimized.glb")

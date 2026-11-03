@@ -93,7 +93,12 @@ gltfLoader.setMeshoptDecoder(MeshoptDecoder); // EXT_meshopt_compression (e.g. T
 const dracoLoader = createDracoLoader();
 gltfLoader.setDRACOLoader(dracoLoader); // KHR_draco_mesh_compression
 gltfLoader.register((parser) => new VRMLoaderPlugin(parser));
-const fbxLoader = new FBXLoader();
+let fbxTexturesLoading = false;
+const fbxWaiters: (() => void)[] = [];
+const fbxManager = new THREE.LoadingManager();
+fbxManager.onStart = () => { fbxTexturesLoading = true; };
+fbxManager.onLoad = () => { fbxTexturesLoading = false; fbxWaiters.splice(0).forEach(resolve => resolve()); };
+const fbxLoader = new FBXLoader(fbxManager);
 
 // Remember the root added to the scene (VRM or plain glTF/GLB) so we can swap it out
 let currentRoot: THREE.Object3D | null = null;
@@ -103,7 +108,7 @@ let currentSkeletonHelper: THREE.SkeletonHelper | null = null;
 let generation = 0;
 let activeRequest = '';
 let destroyed = false;
-function report(type: string, requestID = activeRequest, message?: string) {
+function report(type: string, requestID = activeRequest, message?: unknown) {
   const event = { type, requestID, message, time: performance.now() };
   console.log('[preview]', JSON.stringify(event));
   (window as any).webkit?.messageHandlers?.preview?.postMessage(event);
@@ -228,20 +233,58 @@ function applyModel(
   scheduler.invalidate();
 }
 
+function modelInformation(root: THREE.Object3D, clips: THREE.AnimationClip[]) {
+  let vertices = 0, triangles = 0;
+  const materials = new Set<THREE.Material>();
+  const textures = new Set<THREE.Texture>();
+  root.traverse(object => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const copies = (mesh as THREE.InstancedMesh).isInstancedMesh ? (mesh as THREE.InstancedMesh).count : 1;
+    vertices += (mesh.geometry.getAttribute('position')?.count ?? 0) * copies;
+    const count = mesh.geometry.index?.count ?? mesh.geometry.getAttribute('position')?.count ?? 0;
+    triangles += Math.floor(Math.max(0, Math.min(count - mesh.geometry.drawRange.start, mesh.geometry.drawRange.count)) / 3) * copies;
+    (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(material => {
+      materials.add(material);
+      Object.values(material).forEach(value => { if (value?.isTexture) textures.add(value); });
+      const uniforms = (material as THREE.ShaderMaterial).uniforms;
+      if (uniforms) Object.values(uniforms).forEach(uniform => { if (uniform.value?.isTexture) textures.add(uniform.value); });
+    });
+  });
+  return {
+    vertices, triangles, materials: materials.size,
+    textures: [...textures].map((texture, index) => ({
+      name: texture.name || 'Texture ' + (index + 1),
+      width: texture.image?.width || null, height: texture.image?.height || null,
+    })),
+    animations: clips.map((clip, index) => ({ name: clip.name || 'Animation ' + (index + 1), duration: clip.duration })),
+  };
+}
+
 async function loadModelFromArrayBuffer(buffer: ArrayBuffer, requestID = crypto.randomUUID()) {
   const ticket = ++generation;
   activeRequest = requestID;
+  frameTimes.length = 0;
+  loadedInformation = null;
   showOverlay('Loading…');
   let root: THREE.Object3D | null = null;
   let url: string | undefined;
   let applied = false;
+  const fbxURLs: string[] = [];
   report('parseStart', requestID);
   try {
     let vrm: VRM | null = null;
     let clips: THREE.AnimationClip[];
+    let informationClips: THREE.AnimationClip[];
     if (isFBX(new Uint8Array(buffer))) {
-      root = fbxLoader.parse(buffer, '');
+      // FBXLoader allocates embedded-image Blob URLs without owning their cleanup.
+      const createURL = URL.createObjectURL;
+      URL.createObjectURL = blob => { const value = createURL.call(URL, blob); fbxURLs.push(value); return value; };
+      try { root = fbxLoader.parse(buffer, ''); }
+      finally { URL.createObjectURL = createURL; }
       clips = root.animations;
+      informationClips = clips;
+      if (fbxTexturesLoading) await new Promise<void>(resolve => fbxWaiters.push(resolve));
     } else {
       url = URL.createObjectURL(new Blob([buffer], { type: 'model/gltf-binary' }));
       const gltf = await gltfLoader.loadAsync(url);
@@ -253,14 +296,17 @@ async function loadModelFromArrayBuffer(buffer: ArrayBuffer, requestID = crypto.
         VRMUtils.rotateVRM0(vrm);
       }
       clips = vrm ? [] : gltf.animations;
+      informationClips = gltf.animations;
     }
     report('parseEnd', requestID);
     if (ticket !== generation || destroyed) return;
     disposeCurrent();
     applyModel(root, vrm, clips);
     applied = true;
+    loadedInformation = modelInformation(root, informationClips);
+    report('modelInfo', requestID, loadedInformation);
     renderer.render(scene, camera);
-    frameCount++;
+    recordFrame();
     report('firstFrame', requestID);
   } catch (e) {
     console.error('[model] load failed', e);
@@ -270,6 +316,7 @@ async function loadModelFromArrayBuffer(buffer: ArrayBuffer, requestID = crypto.
     }
   } finally {
     if (url) URL.revokeObjectURL(url);
+    fbxURLs.forEach(value => URL.revokeObjectURL(value));
     if (root && !applied) disposeRoot(root);
   }
 }
@@ -300,7 +347,7 @@ window.addEventListener('message', (event) => {
   if (message?.type === 'loadModel' && typeof message.requestID === 'string' && typeof message.url === 'string' && message.url.startsWith('qlmodel://preview/')) {
     const ticket = ++generation;
     const id = message.requestID;
-    fetch(message.url).then(response => {
+    fetch(message.url, { cache: 'no-store' }).then(response => {
       if (!response.ok) throw new Error('Model transport failed');
       return response.arrayBuffer();
     }).then(buffer => {
@@ -309,6 +356,7 @@ window.addEventListener('message', (event) => {
     return;
   }
   if (message?.type === 'visibility') { nativeVisible = message.visible === true; updateVisibility(); return; }
+  if (message?.type === 'unload') { ++generation; disposeCurrent(); loadedInformation = null; frameTimes.length = 0; activeRequest = ''; scheduler.invalidate(); return; }
   if (message?.type === 'cancel') { ++generation; return; }
   if (message?.type !== 'loadVRM' || typeof message.base64 !== 'string' || typeof message.requestID !== 'string') return;
   try { void loadModelFromArrayBuffer(base64ToArrayBuffer(message.base64), message.requestID); }
@@ -348,12 +396,26 @@ console.log('renderer booted, WebGL context =', !!renderer.getContext());
 let nativeVisible = true;
 let animationEnabled = true;
 let frameCount = 0;
+const frameTimes: number[] = [];
+let loadedInformation: ReturnType<typeof modelInformation> | null = null;
+function recordFrame() {
+  frameCount++;
+  const now = performance.now();
+  frameTimes.push(now);
+  while (frameTimes.length > 1 && frameTimes[0] < now - 1000) frameTimes.shift();
+}
+function measuredFPS() {
+  const now = performance.now();
+  const recent = frameTimes.filter(time => time >= now - 1000);
+  const idle = !nativeVisible || document.hidden || recent.length < 2 || now - recent[recent.length - 1] > 250;
+  return { idle, fps: idle ? null : Math.round((recent.length - 1) * 10000 / (recent[recent.length - 1] - recent[0])) / 10 };
+}
 const scheduler = new RenderScheduler((delta) => {
   const moved = controls.update();
   if (animationEnabled && currentVrm) currentVrm.update(delta);
   if (animationEnabled && currentMixer) currentMixer.update(delta);
   renderer.render(scene, camera);
-  frameCount++;
+  recordFrame();
   return moved || (animationEnabled && (!!currentVrm || !!currentMixer));
 });
 controls.addEventListener('change', scheduler.invalidate);
@@ -361,7 +423,7 @@ function updateVisibility() { scheduler.setVisible(nativeVisible && !document.hi
 document.addEventListener('visibilitychange', updateVisibility);
 scheduler.invalidate();
 (window as any).previewDiagnostics = () => ({
-  requestID: activeRequest, frameCount, generation, animationEnabled, pixelRatio: renderer.getPixelRatio(),
+  ...measuredFPS(), modelInfo: loadedInformation, requestID: activeRequest, frameCount, generation, animationEnabled, pixelRatio: renderer.getPixelRatio(),
   geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures,
 });
 

@@ -1,0 +1,74 @@
+{
+  "recordedAt": "2026-11-04T01:48:01.012066+08:00",
+  "branch": "feat/model-file-viewer",
+  "checks": {
+    "store-regression": {
+      "passedAssertions": 19,
+      "failedAssertions": 0
+    },
+    "wk-regression": {
+      "passedAssertions": 476,
+      "failedAssertions": 0
+    },
+    "native-regression": {
+      "passedAssertions": 11,
+      "failedAssertions": 0
+    },
+    "shared-regression": {
+      "passedAssertions": 2,
+      "failedAssertions": 0
+    },
+    "system-thumbnail-regression": {
+      "passedAssertions": 3,
+      "failedAssertions": 0
+    },
+    "viewer-regression": {
+      "passedAssertions": 366,
+      "failedAssertions": 0
+    }
+  },
+  "actualSystemThumbnailFormats": [
+    "GLB",
+    "VRM",
+    "FBX"
+  ],
+  "systemThumbnailImageContentVerified": true,
+  "temporaryFileAssociationsRestored": true,
+  "systemThumbnailTestRequiresLibraryImport": false,
+  "actualWebContentTerminationRecovered": true,
+  "realFBXBatch": {
+    "files": 114,
+    "sourceBytes": 3979739424,
+    "thumbnailSize": [
+      256,
+      256
+    ],
+    "thumbnailMilliseconds": {
+      "median": 388.46,
+      "p95": 1301.01
+    },
+    "browserCacheBytes": 6326478,
+    "elapsedSecondsIncludingPreparation": 70.5,
+    "peakRSSMiB": {
+      "native": 224.16,
+      "WebContent": 1085.3,
+      "GPU": 609.05,
+      "Networking": 159.41
+    },
+    "finalWebContentRSSKiB": 0,
+    "measurementLimit": "RSS, new WebKit process candidates only; not physical footprint or exclusive GPU attribution"
+  },
+  "resolvedAcceptanceFindings": [
+    "autorelease boundary retained thumbnail controllers",
+    "Quick Look drawing context produced black image",
+    "loading overlay opacity transition appeared in snapshots",
+    "system thumbnail discovery cache held old provider selection"
+  ],
+  "unverified": [
+    "actual Finder icon refresh and physical drag interaction",
+    "distribution signing, notarization and App Store configuration",
+    "CPU, power and physical footprint measurements",
+    "original system warning attribution"
+  ],
+  "installedApplicationReplaced": false
+}

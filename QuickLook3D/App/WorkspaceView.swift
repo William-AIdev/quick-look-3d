@@ -2,132 +2,304 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
-    @StateObject private var model: PreloadModel
-    init(model: PreloadModel = PreloadModel()) { _model = StateObject(wrappedValue: model) }
-    private var settings: Binding<PreviewSettings> { Binding(get: { model.settings }, set: { model.update($0) }) }
-    private var cacheSize: String { ByteCountFormatter.string(fromByteCount: model.statistics.bytes, countStyle: .file) }
+    @EnvironmentObject var library: LibraryModel
+    @State private var settingsVisible = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(spacing: 0) {
+            HStack(spacing: 16) {
+                Image(systemName: "cube.transparent.fill").font(.title2).foregroundColor(.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("模型文件").font(.headline)
+                    Text("Quick Look 3D").font(.caption).foregroundColor(.secondary)
+                }
+                Spacer()
+                if !library.state.folders.isEmpty {
+                    TextField("搜索文件名", text: $library.search).textFieldStyle(.roundedBorder).frame(width: 200)
+                    Button { library.refreshFolder() } label: { Image(systemName: "arrow.clockwise") }.help("刷新当前目录").disabled(library.busy)
+                }
+                Button { library.chooseFolder() } label: { Label("导入文件夹", systemImage: "folder.badge.plus") }.disabled(library.busy)
+                Button { settingsVisible = true } label: { Image(systemName: "slider.horizontal.3") }
+                    .help("查看器设置").disabled(library.files.isEmpty || library.busy)
+            }.padding(18)
+            Divider()
+            if library.state.folders.isEmpty { welcome }
+            else {
+                HStack(spacing: 0) {
+                    sidebar.frame(width: 184)
+                    Divider()
+                    browser.frame(minWidth: 410, maxWidth: .infinity)
+                    Divider()
+                    inspector.frame(width: 274)
+                }
+            }
+            Divider()
             HStack(spacing: 12) {
-                Image(systemName: "cube.transparent.fill").font(.system(size: 32)).foregroundColor(.accentColor)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("模型预览工作台").font(.system(size: 23, weight: .semibold))
-                    Text("为 Finder 空格预览准备轻量模型").foregroundColor(.secondary)
+                if library.busy {
+                    ProgressView(value: Double(library.progress), total: Double(max(1, library.total))).frame(width: 130)
+                    Text("\(library.progress)/\(library.total)").monospacedDigit()
+                    Button("取消") { library.cancel() }
                 }
+                Text(library.status).lineLimit(1)
                 Spacer()
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text(cacheSize).font(.system(.title3, design: .rounded).weight(.medium))
-                    Text("\(model.statistics.count) 个磁盘缓存").font(.caption).foregroundColor(.secondary)
-                }
-            }.padding(24)
-            Divider()
-            HStack(alignment: .top, spacing: 0) {
-                workspace.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity)
-                Divider()
-                preferences.padding(24).frame(width: 290).disabled(model.busy)
-            }
-            Divider()
-            HStack {
-                Image(systemName: model.busy ? "clock" : "checkmark.circle").foregroundColor(.secondary)
-                Text(model.status).font(.callout).lineLimit(2)
-                Spacer()
-                if model.busy { Button("取消", action: model.cancel) }
-            }.padding(.horizontal, 24).padding(.vertical, 14)
+                if !library.files.isEmpty { Text("\(library.visibleFiles.count) 个文件").monospacedDigit() }
+            }.font(.caption).foregroundColor(.secondary).padding(.horizontal, 18).frame(height: 40)
         }
-        .frame(minWidth: 880, idealWidth: 980, minHeight: 620, idealHeight: 690)
+        .frame(minWidth: 980, minHeight: 680)
         .background(Color(NSColor.windowBackgroundColor))
-        .alert("无法完成操作", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
-            Button("好", role: .cancel) { model.error = nil }
-        } message: { Text(model.error ?? "") }
+        .onDrop(of: [UTType.fileURL], isTargeted: $library.targeted) { providers in
+            guard !library.busy, let provider = providers.first else { return false }
+            _ = provider.loadObject(ofClass: NSURL.self) { url, _ in
+                if let url = url as? URL { DispatchQueue.main.async { library.importFolder(url) } }
+            }
+            return true
+        }
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor, lineWidth: library.targeted ? 3 : 0).allowsHitTesting(false))
+        .sheet(isPresented: $settingsVisible) { ViewerSettingsView().environmentObject(library) }
+        .alert("无法完成操作", isPresented: Binding(get: { library.error != nil }, set: { if !$0 { library.error = nil } })) {
+            Button("好") { library.error = nil }
+        } message: { Text(library.error ?? "") }
     }
-    private var workspace: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(spacing: 12) {
-                Image(systemName: "folder.badge.plus").font(.system(size: 42, weight: .light)).foregroundColor(.accentColor)
-                Text("拖入一个模型文件夹").font(.title3.weight(.medium))
-                Text("GLB、VRM、VRMA、FBX\n逐个处理，完成后释放内存；超过 100 个文件时先确认。")
-                    .font(.callout).foregroundColor(.secondary).multilineTextAlignment(.center)
-                Button("选择文件夹…", action: model.chooseFolder).disabled(model.busy || model.store == nil)
+    private var welcome: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "square.stack.3d.up").font(.system(size: 54, weight: .ultraLight)).foregroundColor(.accentColor)
+            Text("让模型文件，有处可看").font(.system(size: 28, weight: .semibold))
+            Text("拖入文件夹，建立可以搜索、收藏的模型列表。\n浏览静态缩略图，需要时再打开三维。").multilineTextAlignment(.center).foregroundColor(.secondary).lineSpacing(6)
+            Button("选择文件夹…") { library.chooseFolder() }.controlSize(.large).keyboardShortcut("o", modifiers: .command).disabled(library.busy)
+            Text("FBX  ·  GLB  ·  VRM  ·  VRMA").font(.caption).foregroundColor(.secondary).padding(.top, 10)
+            Text("Finder 文件缩略图独立工作，无需先导入。").font(.caption).foregroundColor(.secondary)
+        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("资料库").font(.caption).foregroundColor(.secondary).padding(.bottom, 5)
+            navigation("所有文件", icon: "square.grid.2x2", selected: library.folderID == nil && !library.favoritesOnly) {
+                library.folderID = nil; library.favoritesOnly = false
             }
-            .frame(maxWidth: .infinity).padding(.vertical, 28)
-            .background(model.targeted ? Color.accentColor.opacity(0.10) : Color(NSColor.controlBackgroundColor))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(model.targeted ? Color.accentColor : Color.secondary.opacity(0.3), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])))
-            .cornerRadius(12)
-            .onDrop(of: [UTType.fileURL.identifier], isTargeted: $model.targeted, perform: drop)
-            if model.busy {
-                ProgressView(value: Double(model.completed), total: Double(max(1, model.total)))
-                Text(model.total == 0 ? "扫描支持的模型文件…" : "已处理 \(model.completed) / \(model.total)")
-                    .font(.caption).foregroundColor(.secondary)
-            }
-            if model.items.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("准备一次，重复使用").font(.headline)
-                    Text("GLB / VRM 的大型内嵌纹理会按预览质量缩小；原文件保持不变。其他格式保存原始数据缓存。")
-                    Text("缓存按最近使用时间淘汰。更改源文件或质量后，下次预览会重新生成。")
-                }.font(.callout).foregroundColor(.secondary).padding(.top, 8)
-                Spacer(minLength: 0)
-            } else {
-                Text("最近处理").font(.headline)
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(model.items) { item in
-                            HStack(alignment: .top, spacing: 10) {
-                                Image(systemName: item.failed ? "exclamationmark.circle" : "checkmark.circle.fill")
-                                    .foregroundColor(item.failed ? .orange : .accentColor)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(item.name).lineLimit(1).truncationMode(.middle)
-                                    Text(item.detail).font(.caption).foregroundColor(.secondary).lineLimit(2)
-                                }
-                                Spacer(minLength: 0)
-                            }.padding(.vertical, 9)
-                            Divider()
+            navigation("收藏", icon: "star", selected: library.favoritesOnly) { library.folderID = nil; library.favoritesOnly = true }
+            Text("导入的文件夹").font(.caption).foregroundColor(.secondary).padding(.top, 22)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(library.state.folders) { folder in
+                        navigation(folder.name, icon: library.unavailable.contains(folder.id) ? "exclamationmark.folder" : "folder", selected: library.folderID == folder.id && !library.favoritesOnly) {
+                            library.folderID = folder.id; library.favoritesOnly = false
                         }
+                        .help(folder.path)
+                        .contextMenu { Button("移出列表（保留原文件）") { library.removeFolder(folder.id) }.disabled(library.busy) }
                     }
                 }
             }
+            Spacer()
+            Label("原文件保留原位", systemImage: "externaldrive").font(.caption2).foregroundColor(.secondary)
+        }.padding(14).background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+    }
+    private func navigation(_ title: String, icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                .background(selected ? Color.accentColor.opacity(0.12) : Color.clear).cornerRadius(6)
+        }.buttonStyle(.plain)
+    }
+    private var browser: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(library.favoritesOnly ? "收藏" : library.state.folders.first(where: { $0.id == library.folderID })?.name ?? "所有文件").font(.headline).lineLimit(1)
+                Spacer()
+                Picker("排序", selection: $library.state.sort) {
+                    Text("名称").tag("name"); Text("大小").tag("size"); Text("最近修改").tag("modified")
+                }.labelsHidden().frame(width: 100).onChange(of: library.state.sort) { _ in library.persist() }
+                Menu {
+                    Button("为当前列表生成缩略图") { library.preload(thumbnail: true) }
+                    Button("预加载当前列表的数据缓存") { library.preload(thumbnail: false) }
+                } label: { Image(systemName: "ellipsis.circle") }.menuStyle(.borderlessButton).frame(width: 28).disabled(library.busy || library.visibleFiles.isEmpty)
+            }.padding(16)
+            if library.showing3D, let file = library.selected {
+                ModelViewer(file: file).frame(maxWidth: .infinity, maxHeight: .infinity)
+                HStack {
+                    Button("返回缩略图列表") { library.showing3D = false; library.measuredFPS = nil }
+                    Spacer()
+                    Toggle("播放动画", isOn: Binding(get: { library.settings.animate }, set: { var value = library.settings; value.animate = $0; library.updateSettings(value) })).toggleStyle(.checkbox)
+                }.padding(14)
+            } else if library.visibleFiles.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "magnifyingglass").font(.largeTitle)
+                    Text("没有符合条件的文件")
+                }.foregroundColor(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 14)], spacing: 14) {
+                        ForEach(library.visibleFiles) { file in
+                            VStack(alignment: .leading, spacing: 7) {
+                                LibraryThumbnail(file: file).frame(height: 130).frame(maxWidth: .infinity)
+                                    .background(Color(NSColor.textBackgroundColor)).cornerRadius(7)
+                                HStack(alignment: .top, spacing: 4) {
+                                    Text(file.name).font(.system(size: 12, weight: .medium)).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+                                    Button { library.favorite(file) } label: {
+                                        Image(systemName: library.state.favorites.contains(file.signature.identity) ? "star.fill" : "star").foregroundColor(library.state.favorites.contains(file.signature.identity) ? .orange : .secondary)
+                                    }.buttonStyle(.plain).help("收藏并保护磁盘缓存")
+                                }
+                                Text("\(file.url.pathExtension.uppercased())  ·  \(ByteCountFormatter.string(fromByteCount: file.signature.size, countStyle: .file))").font(.caption2).foregroundColor(.secondary)
+                            }.padding(9)
+                                .background(library.selectedID == file.id ? Color.accentColor.opacity(0.08) : Color(NSColor.controlBackgroundColor))
+                                .cornerRadius(10)
+                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(library.selectedID == file.id ? Color.accentColor : Color.primary.opacity(0.07), lineWidth: library.selectedID == file.id ? 2 : 1))
+                                .contentShape(Rectangle())
+                                .onTapGesture(count: 2) { library.open3D(file) }
+                                .onTapGesture { library.select(file) }
+                                .contextMenu {
+                                    Button("打开三维") { library.open3D(file) }
+                                    Button("在 Finder 中显示") { NSWorkspace.shared.activateFileViewerSelecting([file.url]) }
+                                    Button(library.state.favorites.contains(file.signature.identity) ? "取消收藏" : "收藏并缓存") { library.favorite(file) }
+                                }
+                        }
+                    }.padding(16).padding(.top, -8)
+                }
+            }
         }
     }
-    private var preferences: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("预览设置").font(.headline)
-            Picker("画质", selection: settings.quality) {
-                Text("节能 · 1024 纹理").tag("economy")
-                Text("均衡 · 2048 纹理").tag("balanced")
-                Text("原始精度").tag("original")
+    private var inspector: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("查看").font(.headline)
+                Spacer()
+                Menu {
+                    ForEach(InformationField.allCases) { field in
+                        Toggle(field.title, isOn: Binding(get: { library.state.fields.contains(field) }, set: { value in
+                            if value { library.state.fields.insert(field) } else { library.state.fields.remove(field) }; library.persist()
+                        }))
+                    }
+                } label: { Label("信息", systemImage: "list.bullet") }.menuStyle(.borderlessButton).frame(width: 65)
+            }.padding(16)
+            if let file = library.selected {
+                if library.showing3D {
+                    LibraryThumbnail(file: file).frame(height: 150).frame(maxWidth: .infinity).background(Color(NSColor.textBackgroundColor))
+                    HStack {
+                        Button("返回静态图") { library.showing3D = false; library.measuredFPS = nil }
+                        Spacer()
+                        Toggle("动画", isOn: Binding(get: { library.settings.animate }, set: { var settings = library.settings; settings.animate = $0; library.updateSettings(settings) })).toggleStyle(.checkbox)
+                    }.font(.caption).padding(12)
+                } else {
+                    LibraryThumbnail(file: file).frame(height: 200).frame(maxWidth: .infinity).background(Color(NSColor.textBackgroundColor))
+                    Button { library.open3D(file) } label: { Label("打开三维", systemImage: "cube") }.frame(maxWidth: .infinity).padding(12)
+                }
+                Divider()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(file.name).font(.headline).textSelection(.enabled)
+                        Text(file.path).font(.caption2).foregroundColor(.secondary).textSelection(.enabled)
+                        information(file)
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                }
+            } else {
+                Text("选择文件查看缩略图和信息").font(.callout).foregroundColor(.secondary).padding(16)
+                Spacer()
             }
-            Picker("动画帧率", selection: settings.framesPerSecond) {
-                Text("15 FPS").tag(15); Text("30 FPS").tag(30); Text("60 FPS").tag(60)
-            }
-            Toggle("播放动画", isOn: settings.animate)
-            Text("静态模型空闲时停帧。设置自动保存，并在下一次预览时生效。")
-                .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
-            Divider().padding(.vertical, 4)
-            Text("预加载与缓存").font(.headline)
-            Toggle("启用磁盘缓存", isOn: settings.cacheEnabled)
-            Toggle("包含子文件夹", isOn: settings.recursive)
-            Picker("缓存容量", selection: settings.cacheMegabytes) {
-                Text("256 MB").tag(256); Text("1 GB").tag(1024); Text("4 GB").tag(4096)
-            }
-            Picker("单文件上限", selection: settings.maximumFileMegabytes) {
-                Text("64 MB").tag(64); Text("256 MB").tag(256); Text("1 GB").tag(1024)
-            }
-            Text("逐个预处理，避免整个文件夹常驻内存。符号链接、隐藏文件和应用包会跳过。")
-                .font(.caption).foregroundColor(.secondary)
-            Button("清空磁盘缓存", action: model.clear).disabled(model.busy || model.statistics.bytes == 0)
-            Spacer(minLength: 0)
-            Text("在 Finder 选择模型，按空格预览。App 可在预加载完成后关闭。")
-                .font(.caption).foregroundColor(.secondary)
         }
     }
-    private func drop(_ providers: [NSItemProvider]) -> Bool {
-        guard !model.busy, providers.count == 1, let provider = providers.first else { return false }
-        provider.loadObject(ofClass: NSURL.self) { item, error in
-            let url = item as? URL
-            DispatchQueue.main.async {
-                if let url = url { model.importFolder(url) }
-                else { model.error = error?.localizedDescription ?? "无法读取文件夹，请使用“选择文件夹”。" }
+    @ViewBuilder private func information(_ file: LibraryFile) -> some View {
+        if library.state.fields.contains(.fps) {
+            infoRow("实时 FPS", library.showing3D ? library.measuredFPS.map { String(format: "%.1f", $0) } ?? library.renderStatus : "未打开三维")
+        }
+        if let info = file.information {
+            if library.state.fields.contains(.vertices) { infoRow("顶点", info.vertices.formatted()) }
+            if library.state.fields.contains(.triangles) { infoRow("三角形", info.triangles.formatted()) }
+            if library.state.fields.contains(.materials) { infoRow("材质", info.materials.formatted()) }
+            if library.state.fields.contains(.textures) {
+                Text("纹理 · \(info.textures.count)").font(.caption).foregroundColor(.secondary)
+                if info.textures.isEmpty { Text("无纹理").font(.caption) }
+                ForEach(Array(info.textures.enumerated()), id: \.offset) { _, texture in
+                    infoRow(texture.name, texture.width.flatMap { w in texture.height.map { "\(w) × \($0)" } } ?? "未知")
+                }
+            }
+            if library.state.fields.contains(.animations) {
+                Text("动画 · \(info.animations.count)").font(.caption).foregroundColor(.secondary)
+                if info.animations.isEmpty { Text("无动画").font(.caption) }
+                ForEach(Array(info.animations.enumerated()), id: \.offset) { _, clip in infoRow(clip.name, String(format: "%.2f 秒", clip.duration)) }
+            }
+            Text("顶点和三角形按网格实例累加。信息来自上次成功解析，纹理尺寸对应当次预览质量。").font(.caption2).foregroundColor(.secondary)
+        } else {
+            Text("模型信息尚未读取。打开三维，或生成缩略图后读取；未知值不会记作 0。").font(.caption).foregroundColor(.secondary)
+        }
+    }
+    private func infoRow(_ title: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) { Text(title).foregroundColor(.secondary).lineLimit(2); Spacer(); Text(value).monospacedDigit().textSelection(.enabled) }.font(.caption)
+    }
+}
+
+struct LibraryThumbnail: View {
+    @EnvironmentObject var library: LibraryModel
+    let file: LibraryFile
+    @State private var image: NSImage?
+    @State private var requestID: UUID?
+    @State private var failed = false
+    var body: some View {
+        Group {
+            if let image = image { Image(nsImage: image).resizable().scaledToFit() }
+            else {
+                VStack(spacing: 8) {
+                    Image(systemName: failed ? "cube" : "cube.transparent").font(.system(size: 30, weight: .light))
+                    Text(failed ? "缩略图暂不可用" : "正在获取缩略图").font(.caption2)
+                }.foregroundColor(.secondary)
             }
         }
-        return true
+        .onAppear { load() }
+        .onChange(of: file.signature.key) { _ in load() }
+        .onDisappear { if let id = requestID { library.thumbnails?.cancel(id) }; requestID = nil }
+    }
+    private func load() {
+        if let id = requestID { library.thumbnails?.cancel(id) }
+        image = nil; failed = false
+        requestID = library.thumbnails?.load(file) { image, information, error in
+            self.image = image; failed = image == nil && error != nil
+            if let information = information { library.receiveInformation(information, file: file) }
+        }
+    }
+}
+
+struct ModelViewer: NSViewControllerRepresentable {
+    @EnvironmentObject var library: LibraryModel
+    let file: LibraryFile
+    final class Coordinator {
+        var key = ""
+        var settings: PreviewSettings?
+        var timer: Timer?
+        deinit { timer?.invalidate() }
+    }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeNSViewController(context: Context) -> PreviewViewController {
+        let controller = PreviewViewController()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 274, height: 240)
+        return controller
+    }
+    func updateNSViewController(_ controller: PreviewViewController, context: Context) {
+        let coordinator = context.coordinator
+        let key = file.signature.key + "|" + library.settings.quality
+        if coordinator.key != key {
+            coordinator.timer?.invalidate(); coordinator.timer = nil
+            coordinator.key = key; coordinator.settings = library.settings
+            controller.settingsOverride = library.settings
+            controller.onModelInformation = { [weak library] information in library?.receiveInformation(information, file: file) }
+            controller.preparePreviewOfFile(at: file.url) { [weak library] error in
+                guard library?.selectedID == file.id, library?.showing3D == true, coordinator.key == key else { return }
+                if (error as NSError?)?.code == NSUserCancelledError { return }
+                library?.renderStatus = error == nil ? "静止" : "加载失败"
+                if let error = error { library?.error = error.localizedDescription }
+            }
+        } else if coordinator.settings != library.settings {
+            coordinator.settings = library.settings; controller.updatePlayback(library.settings)
+        }
+        if library.state.fields.contains(.fps), coordinator.timer == nil {
+            let timer = Timer(timeInterval: 1, repeats: true) { [weak controller, weak library] _ in
+                guard let controller = controller, controller.view.window?.isVisible == true else { return }
+                controller.diagnostics { value in
+                    guard library?.selectedID == file.id else { return }
+                    library?.measuredFPS = value?["fps"] as? Double
+                    library?.renderStatus = value?["idle"] as? Bool == true ? "静止" : "测量中…"
+                }
+            }
+            coordinator.timer = timer; RunLoop.main.add(timer, forMode: .common)
+        } else if !library.state.fields.contains(.fps) { coordinator.timer?.invalidate(); coordinator.timer = nil }
+    }
+    static func dismantleNSViewController(_ controller: PreviewViewController, coordinator: Coordinator) {
+        coordinator.timer?.invalidate(); coordinator.timer = nil
+        controller.onModelInformation = nil; controller.stopViewing()
     }
 }

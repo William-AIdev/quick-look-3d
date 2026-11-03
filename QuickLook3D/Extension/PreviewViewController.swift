@@ -14,7 +14,34 @@ private final class WeakHandler: NSObject, WKScriptMessageHandler {
 }
 
 final class PreviewViewController: NSViewController, QLPreviewingController, WKNavigationDelegate, WKScriptMessageHandler {
+    private static let dataStore = WKWebsiteDataStore.nonPersistent()
     private var webView: WKWebView!
+    var settingsOverride: PreviewSettings?
+    var onModelInformation: ((ModelInformation) -> Void)?
+    func updatePlayback(_ settings: PreviewSettings) {
+        settingsOverride = settings
+        send(["type": "settings", "pixelRatio": settings.pixelRatio, "fps": settings.framesPerSecond, "animate": settings.animate])
+    }
+    func diagnostics(_ callback: @escaping ([String: Any]?) -> Void) {
+        webView?.evaluateJavaScript("window.previewDiagnostics?.()") { value, _ in callback(value as? [String: Any]) }
+    }
+    func snapshot(_ callback: @escaping (NSImage?, Error?) -> Void) {
+        webView.takeSnapshot(with: nil, completionHandler: callback)
+    }
+    func releaseModel() {
+        modelURL = nil
+        requestID = nil
+        send(["type": "unload"])
+        finish(CocoaError(.userCancelled))
+    }
+    func stopViewing() {
+        requestID = nil
+        modelURL = nil
+        webView?.loadHTMLString("", baseURL: nil)
+        pageReady = false
+        pageLoading = false
+        finish(CocoaError(.userCancelled))
+    }
     private var recoveryAttempts = 0
     private var pageReady = false
     private var pageLoading = false
@@ -31,6 +58,7 @@ final class PreviewViewController: NSViewController, QLPreviewingController, WKN
 
     override func loadView() {
         let config = WKWebViewConfiguration()
+        config.websiteDataStore = Self.dataStore
         config.setURLSchemeHandler(modelScheme, forURLScheme: "qlmodel")
         let receiver = WeakHandler(self)
         config.userContentController.add(receiver, name: "log")
@@ -82,12 +110,13 @@ final class PreviewViewController: NSViewController, QLPreviewingController, WKN
         DispatchQueue.main.asyncAfter(deadline: .now() + 60, execute: deadline)
         ensurePage()
         let store = previewStore
+        let override = settingsOverride
         preparationCancellation = CancellationFlag()
         let flag = preparationCancellation
         preparationQueue.async { [weak self] in
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            let settings = store?.settings() ?? PreviewSettings()
+            let settings = override ?? store?.settings() ?? PreviewSettings()
             let result = Result { () throws -> Data in
                 if let store = store {
                     return try store.prepare(url, settings: settings, cancelled: { flag.cancelled }).data
@@ -156,11 +185,15 @@ final class PreviewViewController: NSViewController, QLPreviewingController, WKN
             return
         }
         guard body["requestID"] as? String == requestID else { return }
+        if type == "modelInfo", let object = body["message"],
+           let data = try? JSONSerialization.data(withJSONObject: object),
+           let information = try? JSONDecoder().decode(ModelInformation.self, from: data) { onModelInformation?(information) }
         if type == "firstFrame" { finish(nil) }
         if type == "error" { finish(failure(body["message"] as? String ?? "Model load failed")) }
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        if (error as NSError).domain == NSURLErrorDomain && (error as NSError).code == NSURLErrorCancelled { return }
         pageLoading = false; pageReady = false; finish(error)
     }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {

@@ -4,11 +4,11 @@ let root = URL(fileURLWithPath: CommandLine.arguments[1])
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 let store = try PreviewStore(root: root.appendingPathComponent("build/ui-store"))
-let model = PreloadModel(store: store)
+let model = LibraryModel(store: store)
 let window = NSWindow(contentRect:NSRect(x:100,y:100,width:980,height:690),styleMask:[.titled,.closable],backing:.buffered,defer:false)
 window.isReleasedWhenClosed = false
 window.title = "QuickLook3D"
-let view = NSHostingView(rootView: ContentView(model: model))
+let view = NSHostingView(rootView: ContentView().environmentObject(model))
 window.contentView = view
 window.makeKeyAndOrderFront(nil)
 app.activate(ignoringOtherApps:true)

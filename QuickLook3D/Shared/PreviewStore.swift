@@ -15,7 +15,7 @@ struct PreviewSettings: Codable, Equatable {
     mutating func validate() {
         if !["economy", "balanced", "original"].contains(quality) { quality = "economy" }
         framesPerSecond = min(60, max(10, framesPerSecond))
-        cacheMegabytes = min(16384, max(64, cacheMegabytes))
+        cacheMegabytes = min(262144, max(64, cacheMegabytes))
         maximumFileMegabytes = min(2048, max(16, maximumFileMegabytes))
     }
 }
@@ -121,8 +121,8 @@ final class PreviewStore {
         if cancelled() { throw CocoaError(.userCancelled) }
         if settings.cacheEnabled {
             let budget = Int64(settings.cacheMegabytes) * 1024 * 1024
-            if Int64(output.data.count) + 2048 <= budget {
-                try coordinated {
+            try coordinated {
+                if Int64(output.data.count) + 2048 <= budget || pinnedPaths().contains(source.standardizedFileURL.path) {
                     try output.data.write(to: binary, options: .atomic)
                     let entry = Entry(source: source.standardizedFileURL.path, sourceBytes: initial.0, sourceModified: initial.1, reducedTextures: output.reducedTextures, digest: Self.digest(output.data))
                     try JSONEncoder().encode(entry).write(to: manifest, options: .atomic)
@@ -141,6 +141,16 @@ final class PreviewStore {
         }
         return result
     }
+    private func pinnedPaths() -> Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: Data(contentsOf: root.appendingPathComponent("pinned.json")))) ?? []
+    }
+    func setPinnedPaths(_ paths: Set<String>) throws {
+        try coordinated { try JSONEncoder().encode(paths).write(to: root.appendingPathComponent("pinned.json"), options: .atomic) }
+    }
+    private func protected(_ binary: URL, pins: Set<String>) -> Bool {
+        guard let entry = try? JSONDecoder().decode(Entry.self, from: Data(contentsOf: binary.deletingPathExtension().appendingPathExtension("json"))) else { return false }
+        return pins.contains(entry.source)
+    }
     private func evict(budget: Int64) throws {
         let files = try manager.contentsOfDirectory(at: cache, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey])
         // Incomplete entries can remain after a process exits between the two atomic writes.
@@ -152,16 +162,21 @@ final class PreviewStore {
             ((try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) < ((try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast)
         }
         var total = try statisticsUnlocked().bytes
-        for file in ordered where total > budget {
+        let pins = pinnedPaths()
+        for file in ordered where total > budget && !protected(file, pins: pins) {
             for item in [file, file.deletingPathExtension().appendingPathExtension("json")] where manager.fileExists(atPath: item.path) {
                 total -= Int64((try? item.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
                 try manager.removeItem(at: item)
             }
         }
     }
-    func clear() throws {
+    func clear(includingPinned: Bool = false) throws {
         try coordinated {
-            for file in try manager.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil) { try manager.removeItem(at: file) }
+            let pins = includingPinned ? Set<String>() : pinnedPaths()
+            for file in try manager.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil) {
+                let binary = file.deletingPathExtension().appendingPathExtension("bin")
+                if !protected(binary, pins: pins) { try manager.removeItem(at: file) }
+            }
         }
     }
 }

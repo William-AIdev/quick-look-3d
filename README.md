@@ -35,19 +35,31 @@ Select a supported file in Finder and press **Space** (or right-click → Quick 
 - Drag to rotate, scroll to zoom
 - Files with no mesh/skin (a skin-less `.fbx`, or `.vrma`) are shown as a skeleton
 
-## Folder preload and persistent preview settings (this fork)
+## Model file viewer (this fork)
 
-The app includes a folder drop workspace, automatically saved quality/FPS preferences,
-sequential preparation, cancellation, and a bounded disk cache shared with previews.
-More than 100 supported files require confirmation before preparation. Economy mode
-reduces supported embedded textures to 1024 pixels and defaults to 30 FPS. Source
-files remain untouched; close the app after preparation to release its memory.
+The main app is a model file viewer with persistent folder/file imports, a searchable
+thumbnail grid, favorites, an interactive 3D view, and selectable model information.
+Importing a folder indexes its files; it does not parse every model or copy every FBX.
+More than 100 supported files require confirmation. Browsing uses static thumbnails;
+3D rendering starts when a model is opened and stops when returning to the list.
 
-See [implementation, measured memory, and validation](docs/PRELOAD-SETTINGS-MEMORY.md).
-These features are in this fork's source/local build; the upstream release linked
-above does not include them. Local builds use ad-hoc signing and have not been notarized.
+The information panel offers measured rendering FPS, vertices, triangles, materials,
+texture dimensions, and animation durations. Quality, animation, cache budgets,
+selected fields, and favorites survive restart. Data caches support up to 256 GiB;
+favorites are protected from automatic eviction. FBX retains its existing parser;
+a raw FBX cache does not remove the parsing or GPU-upload cost.
 
-![Folder preload workspace](docs/workspace.png)
+Independent Quick Look preview and Finder thumbnail extensions are bundled. The
+Finder provider does not require a library import; macOS owns its thumbnail cache
+and chooses which installed provider handles each format.
+
+See [viewer behavior, memory measurements, and acceptance results](docs/MODEL-VIEWER.md).
+The earlier [preload measurements](docs/PRELOAD-SETTINGS-MEMORY.md) describe the previous
+workspace. These changes are in this fork's source/local build; the upstream release
+linked above does not include them. Local builds use ad-hoc signing and have not
+been notarized.
+
+![Model file viewer](docs/model-viewer.png)
 
 ## Troubleshooting
 

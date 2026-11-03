@@ -16,6 +16,8 @@ jobs:
       - run: bash scripts/build.sh
       - run: node renderer/generate-fixtures.mjs
       - run: bash scripts/test-native.sh
+      - run: bash scripts/test-viewer.sh > build/viewer-regression.log 2>&1
+      - run: python3 scripts/test-system-thumbnails.py > build/system-thumbnail-regression.log 2>&1
       - run: bash scripts/test-shared.sh > build/shared-regression.log 2>&1
       - run: python3 scripts/process-recovery.py "$PWD"
       - uses: actions/upload-artifact@v4
@@ -29,3 +31,6 @@ jobs:
             build/store-regression.log
             build/shared-regression.log
             build/process-regression.log
+            build/viewer-regression.log
+            build/system-thumbnail-regression.log
+            build/system-thumbnails/*.png

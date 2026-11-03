@@ -12,7 +12,7 @@ if [[ -n "${QL_TEST_VRM:-}" ]]; then
     python3 scripts/measure-memory.py "$ROOT" "$QL_TEST_VRM" --output build/memory-real-vrm.json
 fi
 cp scripts/ui-probe.swift build/main.swift
-xcrun swiftc QuickLook3D/Shared/*.swift QuickLook3D/App/PreloadModel.swift QuickLook3D/App/WorkspaceView.swift build/main.swift -o build/ui-probe
+xcrun swiftc QuickLook3D/Shared/*.swift QuickLook3D/Extension/*.swift QuickLook3D/Rendering/*.swift QuickLook3D/App/LibraryModel.swift QuickLook3D/App/BrowserThumbnailService.swift QuickLook3D/App/ViewerSettingsView.swift QuickLook3D/App/WorkspaceView.swift build/main.swift -o build/ui-probe
 build/ui-probe "$ROOT"
 python3 - <<'PY'
 import json, pathlib, subprocess, time

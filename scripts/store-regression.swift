@@ -79,17 +79,4 @@ try fm.createSymbolicLink(at: folder.appendingPathComponent("link.glb"), withDes
 check(try FolderScanner.scan(folder, recursive: false, cancelled: { false }).count == 100, "non-recursive scan skips subfolders and symlinks")
 check(try FolderScanner.scan(folder, recursive: true, cancelled: { false }).count == 101, "recursive scan counts only supported regular files")
 try store.clear()
-let model = PreloadModel(store: store)
-var confirmations = 0
-model.confirmLargeImport = { count in confirmations += 1; check(count == 101, "confirmation counts supported models"); return false }
-model.importFolder(folder); spin(until: { !model.busy })
-check(confirmations == 1 && model.completed == 0, "101-file decline performs no preparation")
-check(try store.statistics().count == 0, "declined import writes no cache")
-model.settings.recursive = false
-model.importFolder(folder); spin(until: { !model.busy })
-check(confirmations == 1 && model.completed == 100, "100-file import needs no confirmation")
-model.settings.recursive = true
-model.confirmLargeImport = { _ in confirmations += 1; model.cancel(); return true }
-model.importFolder(folder); spin(until: { !model.busy })
-check(confirmations == 2 && model.completed == 0, "cancellation stops confirmed import before first model")
-print("PASS: store and preload regression complete")
+print("PASS: store and folder scanner regression complete")

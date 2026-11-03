@@ -9,7 +9,7 @@ final class ModelSchemeHandler: NSObject, WKURLSchemeHandler {
         guard let url = task.request.url, url.host == "preview", let data = payloads[url.lastPathComponent] else {
             task.didFailWithError(URLError(.fileDoesNotExist)); return
         }
-        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/octet-stream", "Content-Length": String(data.count), "Access-Control-Allow-Origin": "*"])!
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/octet-stream", "Content-Length": String(data.count), "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"])!
         task.didReceive(response)
         task.didReceive(data)
         task.didFinish()

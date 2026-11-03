@@ -4,7 +4,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 mkdir -p build
 cp scripts/store-regression.swift build/main.swift
-xcrun swiftc QuickLook3D/Shared/*.swift QuickLook3D/App/PreloadModel.swift build/main.swift -o build/store-regression
+xcrun swiftc QuickLook3D/Shared/*.swift build/main.swift -o build/store-regression
 build/store-regression "$ROOT" > build/store-regression.log 2>&1
 xcrun swiftc scripts/wk-regression.swift -o build/wk-regression
 build/wk-regression "$ROOT" > build/wk-regression.log 2>&1
