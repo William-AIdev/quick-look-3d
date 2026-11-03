@@ -1,3 +1,4 @@
+import { RenderScheduler } from './render-scheduler';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
@@ -224,6 +225,7 @@ function applyModel(
   currentVrm = vrm;
   frameModel(root);
   hideOverlay();
+  scheduler.invalidate();
 }
 
 async function loadModelFromArrayBuffer(buffer: ArrayBuffer, requestID = crypto.randomUUID()) {
@@ -284,6 +286,7 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 // ---------------------------------------------------------------------------
 window.addEventListener('message', (event) => {
   const message = event.data;
+  if (message?.type === 'visibility') { nativeVisible = message.visible === true; updateVisibility(); return; }
   if (message?.type === 'cancel') { ++generation; return; }
   if (message?.type !== 'loadVRM' || typeof message.base64 !== 'string' || typeof message.requestID !== 'string') return;
   try { void loadModelFromArrayBuffer(base64ToArrayBuffer(message.base64), message.requestID); }
@@ -320,23 +323,36 @@ console.log('renderer booted, WebGL context =', !!renderer.getContext());
 // ---------------------------------------------------------------------------
 // Render loop
 // ---------------------------------------------------------------------------
-function animate() {
-  requestAnimationFrame(animate);
-  const delta = 1 / 60;
-  controls.update();
-  if (currentVrm) currentVrm.update(delta); // update spring bones, expressions, etc.
-  if (currentMixer) currentMixer.update(delta); // glTF/GLB animation
+let nativeVisible = true;
+let frameCount = 0;
+const scheduler = new RenderScheduler((delta) => {
+  const moved = controls.update();
+  if (currentVrm) currentVrm.update(delta);
+  if (currentMixer) currentMixer.update(delta);
   renderer.render(scene, camera);
-}
-animate();
+  frameCount++;
+  return moved || !!currentVrm || !!currentMixer;
+});
+controls.addEventListener('change', scheduler.invalidate);
+function updateVisibility() { scheduler.setVisible(nativeVisible && !document.hidden); }
+document.addEventListener('visibilitychange', updateVisibility);
+scheduler.invalidate();
+(window as any).previewDiagnostics = () => ({
+  requestID: activeRequest, frameCount, generation,
+  geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures,
+});
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  scheduler.invalidate();
 });
 
 window.addEventListener('pagehide', () => {
+  scheduler.dispose();
+  controls.removeEventListener('change', scheduler.invalidate);
+  document.removeEventListener('visibilitychange', updateVisibility);
   destroyed = true;
   ++generation;
   disposeCurrent();
