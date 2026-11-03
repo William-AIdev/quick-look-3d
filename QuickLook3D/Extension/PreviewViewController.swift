@@ -3,123 +3,157 @@ import os
 import Quartz
 import WebKit
 
-/// A QL extension has no visible console, so it's hard to debug. Forward the lifecycle
-/// and the JS console to os_log. To inspect:
-///   log stream --predicate 'subsystem == "com.sawazen.QuickLook3D"'
 private let qlLog = Logger(subsystem: "com.sawazen.QuickLook3D", category: "preview")
 
-private func debugLog(_ message: String) {
-    qlLog.log("\(message, privacy: .public)")
+private final class WeakHandler: NSObject, WKScriptMessageHandler {
+    weak var target: WKScriptMessageHandler?
+    init(_ target: WKScriptMessageHandler) { self.target = target }
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        target?.userContentController(controller, didReceive: message)
+    }
 }
 
-/// View controller that previews 3D models in Quick Look.
-///
-/// Structure:
-///   - displays Resources/renderer/index.html (the front end bundled into one file by Vite) in a WKWebView
-///   - passes the file contents to JS as Base64 via window.postMessage
-///   - the JS side (three-vrm) renders it with WebGL
-final class PreviewViewController: NSViewController, QLPreviewingController {
-
+final class PreviewViewController: NSViewController, QLPreviewingController, WKNavigationDelegate, WKScriptMessageHandler {
     private var webView: WKWebView!
-
-    /// Base64 of the model to hand to JS. Injected after the page finishes loading.
-    private var pendingBase64: String?
+    private var pageReady = false
+    private var pageLoading = false
+    private var requestID: String?
+    private var completion: ((Error?) -> Void)?
+    private var payload: String?
+    private var modelURL: URL?
+    private var timeout: DispatchWorkItem?
 
     override func loadView() {
         let config = WKWebViewConfiguration()
-        config.suppressesIncrementalRendering = false
-
-        // Receiver that forwards the JS console to os_log (for debugging).
-        // Inspect with `log stream --predicate 'subsystem == "com.sawazen.QuickLook3D"'`.
-        config.userContentController.add(self, name: "log")
-
+        let receiver = WeakHandler(self)
+        config.userContentController.add(receiver, name: "log")
+        config.userContentController.add(receiver, name: "preview")
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
-        // The background is painted by the HTML (body background), so no WKWebView setting needed.
-        self.view = webView
+        view = webView
     }
 
-    // MARK: - QLPreviewingController
+    deinit {
+        timeout?.cancel()
+        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "log")
+        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "preview")
+        completion?(NSError(domain: "QuickLook3D", code: -999))
+    }
 
-    func preparePreviewOfFile(
-        at url: URL,
-        completionHandler handler: @escaping (Error?) -> Void
-    ) {
-        // Even under the sandbox, the URL passed to preparePreviewOfFile is readable.
-        // Open the security scope before reading the file.
-        let needsStop = url.startAccessingSecurityScopedResource()
-        defer { if needsStop { url.stopAccessingSecurityScopedResource() } }
+    private func finish(_ error: Error?) {
+        timeout?.cancel()
+        timeout = nil
+        payload = nil
+        let callback = completion
+        completion = nil
+        callback?(error)
+    }
 
-        guard let data = try? Data(contentsOf: url) else {
-            handler(NSError(
-                domain: "QuickLook3D",
-                code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "Could not read the file."]
-            ))
+    private func failure(_ text: String) -> NSError {
+        NSError(domain: "QuickLook3D", code: -1, userInfo: [NSLocalizedDescriptionKey: text])
+    }
+
+    func preparePreviewOfFile(at url: URL, completionHandler handler: @escaping (Error?) -> Void) {
+        _ = view
+        finish(NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError))
+        let id = UUID().uuidString
+        requestID = id
+        completion = handler
+        modelURL = url
+        qlLog.log("request \(id, privacy: .public)")
+        if pageReady { send(["type": "cancel", "requestID": id]) }
+        let deadline = DispatchWorkItem { [weak self] in
+            guard let self = self, self.requestID == id else { return }
+            self.send(["type": "cancel", "requestID": id])
+            self.finish(self.failure("Preview timed out"))
+        }
+        timeout = deadline
+        DispatchQueue.main.asyncAfter(deadline: .now() + 60, execute: deadline)
+        ensurePage()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            let result = Result { try Data(contentsOf: url).base64EncodedString() }
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, self.requestID == id, self.completion != nil else { return }
+                switch result {
+                case .success(let data):
+                    self.payload = data
+                    qlLog.log("read \(id, privacy: .public)")
+                    self.deliver()
+                case .failure(let error): self.finish(error)
+                }
+            }
+        }
+    }
+
+    private func ensurePage() {
+        guard !pageReady, !pageLoading else { return }
+        guard let html = Bundle(for: PreviewViewController.self).url(forResource: "index", withExtension: "html", subdirectory: "renderer") else {
+            finish(failure("renderer/index.html missing")); return
+        }
+        pageLoading = true
+        webView.loadFileURL(html, allowingReadAccessTo: html.deletingLastPathComponent())
+    }
+
+    private func send(_ message: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: message),
+              let json = String(data: data, encoding: .utf8) else { return }
+        let id = requestID
+        webView.evaluateJavaScript("window.postMessage(\(json), '*')") { [weak self] _, error in
+            guard let self = self, self.requestID == id else { return }
+            if let error = error { self.finish(error) }
+        }
+    }
+
+    private func deliver() {
+        guard pageReady, let data = payload, let id = requestID, completion != nil else { return }
+        payload = nil
+        send(["type": "loadVRM", "requestID": id, "base64": data])
+        qlLog.log("transfer \(id, privacy: .public)")
+    }
+
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "log" {
+            qlLog.log("JS \(String(describing: message.body), privacy: .public)")
             return
         }
-        pendingBase64 = data.base64EncodedString()
-        debugLog("prepare: read \(data.count) bytes, base64 \(pendingBase64?.count ?? 0) chars")
-
-        // Load the bundled single HTML file.
-        // allowingReadAccessTo gets the directory that HTML lives in.
-        guard let htmlURL = Bundle.main.url(
-            forResource: "index",
-            withExtension: "html",
-            subdirectory: "renderer"
-        ) else {
-            handler(NSError(
-                domain: "QuickLook3D",
-                code: -2,
-                userInfo: [NSLocalizedDescriptionKey: "renderer/index.html not found."]
-            ))
+        guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
+        if type == "pageReady" {
+            pageReady = true
+            pageLoading = false
+            qlLog.log("page-ready")
+            deliver()
             return
         }
-
-        debugLog("prepare: loading html \(htmlURL.path)")
-        webView.loadFileURL(
-            htmlURL,
-            allowingReadAccessTo: htmlURL.deletingLastPathComponent()
-        )
-
-        // The page is ready to display, so tell Quick Look we're done.
-        // The actual model rendering happens asynchronously once the page loads (didFinish).
-        handler(nil)
+        guard body["requestID"] as? String == requestID else { return }
+        if type == "firstFrame" { finish(nil) }
+        if type == "error" { finish(failure(body["message"] as? String ?? "Model load failed")) }
     }
-}
 
-// MARK: - WKNavigationDelegate
-
-extension PreviewViewController: WKNavigationDelegate {
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        guard let base64 = pendingBase64 else { return }
-        pendingBase64 = nil
-        debugLog("didFinish: injecting VRM (\(base64.count) base64 chars)")
-
-        // Base64 is only [A-Za-z0-9+/=], so it embeds safely inside single quotes.
-        let script = "window.postMessage({ type: 'loadVRM', base64: '\(base64)' }, '*');"
-        webView.evaluateJavaScript(script) { _, error in
-            if let error { debugLog("inject failed: \(error.localizedDescription)") } else { debugLog("inject ok") }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        pageLoading = false; pageReady = false; finish(error)
+    }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        self.webView(webView, didFail: navigation, withError: error)
+    }
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        pageReady = false; pageLoading = false
+        let url = modelURL
+        let callback = completion
+        completion = nil
+        timeout?.cancel()
+        if let url = url {
+            preparePreviewOfFile(at: url, completionHandler: callback ?? { _ in })
         }
     }
 
-    func webView(
-        _ webView: WKWebView,
-        didFail navigation: WKNavigation!,
-        withError error: Error
-    ) {
-        debugLog("navigation failed: \(error.localizedDescription)")
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        send(["type": "visibility", "visible": true])
     }
-}
-
-// MARK: - WKScriptMessageHandler (JS console → os_log)
-
-extension PreviewViewController: WKScriptMessageHandler {
-    func userContentController(
-        _ userContentController: WKUserContentController,
-        didReceive message: WKScriptMessage
-    ) {
-        guard message.name == "log" else { return }
-        debugLog("[JS] \(String(describing: message.body))")
+    override func viewDidDisappear() {
+        super.viewDidDisappear()
+        send(["type": "visibility", "visible": false])
     }
 }

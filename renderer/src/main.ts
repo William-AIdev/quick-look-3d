@@ -89,7 +89,8 @@ scene.add(grid);
 // ---------------------------------------------------------------------------
 const gltfLoader = new GLTFLoader();
 gltfLoader.setMeshoptDecoder(MeshoptDecoder); // EXT_meshopt_compression (e.g. TripoAI / gltfpack output)
-gltfLoader.setDRACOLoader(createDracoLoader()); // KHR_draco_mesh_compression
+const dracoLoader = createDracoLoader();
+gltfLoader.setDRACOLoader(dracoLoader); // KHR_draco_mesh_compression
 gltfLoader.register((parser) => new VRMLoaderPlugin(parser));
 const fbxLoader = new FBXLoader();
 
@@ -98,7 +99,20 @@ let currentRoot: THREE.Object3D | null = null;
 let currentVrm: VRM | null = null;
 let currentMixer: THREE.AnimationMixer | null = null;
 let currentSkeletonHelper: THREE.SkeletonHelper | null = null;
-const clock = new THREE.Clock();
+let generation = 0;
+let activeRequest = '';
+let destroyed = false;
+function report(type: string, requestID = activeRequest, message?: string) {
+  const event = { type, requestID, message, time: performance.now() };
+  console.log('[preview]', JSON.stringify(event));
+  (window as any).webkit?.messageHandlers?.preview?.postMessage(event);
+}
+function disposeRoot(root: THREE.Object3D) {
+  const skeletons = new Set<THREE.Skeleton>();
+  root.traverse(o => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) skeletons.add((o as THREE.SkinnedMesh).skeleton); });
+  skeletons.forEach(skeleton => skeleton.dispose());
+  VRMUtils.deepDispose(root);
+}
 
 /** Whether it has a renderable mesh. false for VRMA / skin-less FBX. */
 function hasRenderableMesh(root: THREE.Object3D): boolean {
@@ -148,6 +162,7 @@ function frameModel(root: THREE.Object3D) {
 function disposeCurrent() {
   if (currentMixer) {
     currentMixer.stopAllAction();
+    if (currentRoot) currentMixer.uncacheRoot(currentRoot);
     currentMixer = null;
   }
   if (currentSkeletonHelper) {
@@ -157,7 +172,7 @@ function disposeCurrent() {
   }
   if (currentRoot) {
     scene.remove(currentRoot);
-    VRMUtils.deepDispose(currentRoot);
+    disposeRoot(currentRoot);
     currentRoot = null;
   }
   currentVrm = null;
@@ -211,49 +226,48 @@ function applyModel(
   hideOverlay();
 }
 
-async function loadModelFromArrayBuffer(buffer: ArrayBuffer) {
+async function loadModelFromArrayBuffer(buffer: ArrayBuffer, requestID = crypto.randomUUID()) {
+  const ticket = ++generation;
+  activeRequest = requestID;
   showOverlay('Loading…');
+  let root: THREE.Object3D | null = null;
+  let url: string | undefined;
+  let applied = false;
+  report('parseStart', requestID);
   try {
-    disposeCurrent();
-
+    let vrm: VRM | null = null;
+    let clips: THREE.AnimationClip[];
     if (isFBX(new Uint8Array(buffer))) {
-      // --- FBX ---
-      const root = fbxLoader.parse(buffer, '');
-      applyModel(root, null, root.animations);
-      console.log('FBX loaded & added to scene');
-      return;
+      root = fbxLoader.parse(buffer, '');
+      clips = root.animations;
+    } else {
+      url = URL.createObjectURL(new Blob([buffer], { type: 'model/gltf-binary' }));
+      const gltf = await gltfLoader.loadAsync(url);
+      root = gltf.scene;
+      vrm = (gltf.userData.vrm as VRM | undefined) ?? null;
+      if (vrm) {
+        VRMUtils.removeUnnecessaryVertices(root);
+        VRMUtils.combineSkeletons(root);
+        VRMUtils.rotateVRM0(vrm);
+      }
+      clips = vrm ? [] : gltf.animations;
     }
-
-    // --- VRM / VRMA / glTF / GLB ---
-    const blob = new Blob([buffer], { type: 'model/gltf-binary' });
-    const url = URL.createObjectURL(blob);
-    const gltf = await gltfLoader.loadAsync(url);
-    URL.revokeObjectURL(url);
-
-    // The VRM plugin sets userData.vrm when it can parse it; otherwise plain glTF/GLB.
-    // A VRMA (no mesh, animation only) ends up vrm=null + animations present, and
-    // applyModel routes it to the skeleton view.
-    const vrm = (gltf.userData.vrm as VRM | undefined) ?? null;
-    if (vrm) {
-      VRMUtils.removeUnnecessaryVertices(gltf.scene);
-      VRMUtils.combineSkeletons(gltf.scene);
-      VRMUtils.rotateVRM0(vrm); // fix VRM 0.x coordinate system (faces +Z)
-    }
-    applyModel(vrm ? vrm.scene : gltf.scene, vrm, vrm ? [] : gltf.animations);
-    console.log(
-      vrm
-        ? 'VRM loaded & added to scene'
-        : hasRenderableMesh(gltf.scene)
-          ? 'glTF/GLB loaded & added to scene'
-          : 'skeleton (mesh-less) loaded & added to scene',
-    );
+    report('parseEnd', requestID);
+    if (ticket !== generation || destroyed) return;
+    disposeCurrent();
+    applyModel(root, vrm, clips);
+    applied = true;
+    renderer.render(scene, camera);
+    report('firstFrame', requestID);
   } catch (e) {
-    // An Error would serialize to "{}" in the os_log forwarder, so flatten it first.
-    console.error(
-      '[model] load failed',
-      e instanceof Error ? (e.stack ?? e.message) : typeof e === 'string' ? e : JSON.stringify(e),
-    );
-    showOverlay('Failed to load', true);
+    console.error('[model] load failed', e);
+    if (ticket === generation && !destroyed) {
+      showOverlay('Failed to load', true);
+      report('error', requestID, String(e));
+    }
+  } finally {
+    if (url) URL.revokeObjectURL(url);
+    if (root && !applied) disposeRoot(root);
   }
 }
 
@@ -269,9 +283,11 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 //   received via window.postMessage({ type: 'loadVRM', base64 })
 // ---------------------------------------------------------------------------
 window.addEventListener('message', (event) => {
-  if (event.data?.type !== 'loadVRM') return;
-  console.log('received loadVRM message, base64 length =', event.data.base64?.length);
-  void loadModelFromArrayBuffer(base64ToArrayBuffer(event.data.base64));
+  const message = event.data;
+  if (message?.type === 'cancel') { ++generation; return; }
+  if (message?.type !== 'loadVRM' || typeof message.base64 !== 'string' || typeof message.requestID !== 'string') return;
+  try { void loadModelFromArrayBuffer(base64ToArrayBuffer(message.base64), message.requestID); }
+  catch (error) { report('error', message.requestID, String(error)); }
 });
 
 console.log('renderer booted, WebGL context =', !!renderer.getContext());
@@ -306,7 +322,7 @@ console.log('renderer booted, WebGL context =', !!renderer.getContext());
 // ---------------------------------------------------------------------------
 function animate() {
   requestAnimationFrame(animate);
-  const delta = clock.getDelta();
+  const delta = 1 / 60;
   controls.update();
   if (currentVrm) currentVrm.update(delta); // update spring bones, expressions, etc.
   if (currentMixer) currentMixer.update(delta); // glTF/GLB animation
@@ -319,3 +335,15 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+window.addEventListener('pagehide', () => {
+  destroyed = true;
+  ++generation;
+  disposeCurrent();
+  dracoLoader.dispose();
+  controls.dispose();
+  grid.geometry.dispose();
+  (grid.material as THREE.Material).dispose();
+  renderer.dispose();
+});
+report('pageReady', '');
